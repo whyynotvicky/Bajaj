@@ -1,4 +1,4 @@
-export async function startFastzixPayment({ amount, userId, userPhone }: { amount: number, userId: string, userPhone: string }) {
+export async function startFastzixPayment({ amount, userId, userPhone, onError }: { amount: number, userId: string, userPhone: string, onError?: (msg: string) => void }) {
   try {
     const response = await fetch('/api/fastzix-order', {
       method: 'POST',
@@ -9,9 +9,11 @@ export async function startFastzixPayment({ amount, userId, userPhone }: { amoun
     if (data.status && data.result && data.result.payment_url) {
       window.location.href = data.result.payment_url;
     } else {
-      alert("Fastzix API Error: " + JSON.stringify(data, null, 2));
+      if (onError) onError("Fastzix API Error: " + (data.message || JSON.stringify(data, null, 2)));
+      else alert("Fastzix API Error: " + JSON.stringify(data, null, 2));
     }
   } catch (err: any) {
-    alert("Network or integration error: " + err.message);
+    if (onError) onError("Network or integration error: " + err.message);
+    else alert("Network or integration error: " + err.message);
   }
 } 

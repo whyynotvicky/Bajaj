@@ -12,6 +12,8 @@ import { getAuth } from "firebase/auth"
 export default function RechargePage() {
   const [rechargeAmount, setRechargeAmount] = useState("")
   const [selectedChannel, setSelectedChannel] = useState("channelA")
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
 
   const quickAmounts = [210, 310, 420, 700, 900, 1200, 1400, 2100, 6000]
 
@@ -24,14 +26,15 @@ export default function RechargePage() {
   }
 
   const handleRechargeNow = async () => {
+    setError("")
     if (!rechargeAmount) {
-      alert("Please enter or select a recharge amount")
+      setError("Please enter or select a recharge amount")
       return
     }
     const auth = getAuth()
     const user = auth.currentUser
     if (!user) {
-      alert("Please log in first.")
+      setError("Please log in first.")
       return
     }
     let userPhone = user.phoneNumber
@@ -39,10 +42,17 @@ export default function RechargePage() {
       userPhone = prompt('Enter your mobile number for payment:') || ''
     }
     if (!userPhone) {
-      alert('Mobile number is required for payment.')
+      setError('Mobile number is required for payment.')
       return
     }
-    await startFastzixPayment({ amount: Number(rechargeAmount), userId: user.uid, userPhone })
+    setLoading(true)
+    try {
+      await startFastzixPayment({ amount: Number(rechargeAmount), userId: user.uid, userPhone, onError: setError })
+    } catch (e: any) {
+      setError(e.message || 'Unknown error')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleCustomerService = () => {
@@ -180,11 +190,13 @@ export default function RechargePage() {
 
       {/* Recharge Now Button */}
       <div className="mx-4 mb-20">
+        {error && <div className="mb-2 text-red-600 text-center font-medium">{error}</div>}
         <Button
           onClick={handleRechargeNow}
           className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-2xl py-4 font-semibold text-lg"
+          disabled={loading}
         >
-          Recharge Now
+          {loading ? 'Processing...' : 'Recharge Now'}
         </Button>
       </div>
 

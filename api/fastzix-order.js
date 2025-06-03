@@ -33,11 +33,10 @@ export default async function handler(req, res) {
     redirect_url,
     udf1: userId,
     udf2: "",
-    api_key,
   };
 
   // Generate HMAC signature
-  const xVerify = generateHmacSignature(payload, api_key);
+  const xVerify = generateHmacSignature({ ...payload, api_key }, api_key);
 
   try {
     const response = await fetch(endpoint, {
