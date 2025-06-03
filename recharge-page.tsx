@@ -37,12 +37,9 @@ export default function RechargePage() {
       setError("Please log in first.")
       return
     }
-    let userPhone = user.phoneNumber
-    if (!userPhone) {
-      userPhone = prompt('Enter your mobile number for payment:')?.trim() || ''
-    }
+    const userPhone = user.phoneNumber
     if (!userPhone || !/^\d{10,15}$/.test(userPhone)) {
-      setError('A valid mobile number is required for payment.')
+      setError('Your account does not have a valid mobile number. Please update your profile with a valid phone number to recharge.')
       return
     }
     setLoading(true)
