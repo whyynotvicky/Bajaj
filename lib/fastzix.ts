@@ -17,15 +17,19 @@ export async function startFastzixPayment({ amount, userId, userPhone }: { amoun
     api_key,
   };
 
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const data = await response.json();
-  if (data.status && data.result && data.result.payment_url) {
-    window.location.href = data.result.payment_url;
-  } else {
-    alert("Failed to create payment order. Please try again.");
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json();
+    if (data.status && data.result && data.result.payment_url) {
+      window.location.href = data.result.payment_url;
+    } else {
+      alert("Fastzix API Error: " + JSON.stringify(data, null, 2));
+    }
+  } catch (err: any) {
+    alert("Network or integration error: " + err.message);
   }
 } 
