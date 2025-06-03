@@ -11,8 +11,15 @@ export async function POST(req: Request) {
   try {
     const { amount, userId, userPhone } = await req.json();
     
-    if (!userPhone) {
-      return NextResponse.json({ error: 'Missing userPhone for Fastzix payment.' }, { status: 400 });
+    // Robust validation for all required fields
+    if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
+      return NextResponse.json({ error: 'Invalid or missing amount for Fastzix payment.' }, { status: 400 });
+    }
+    if (!userId || typeof userId !== 'string' || userId.trim() === '') {
+      return NextResponse.json({ error: 'Missing userId for Fastzix payment.' }, { status: 400 });
+    }
+    if (!userPhone || typeof userPhone !== 'string' || !/^\d{10,15}$/.test(userPhone)) {
+      return NextResponse.json({ error: 'A valid userPhone (10-15 digits) is required for Fastzix payment.' }, { status: 400 });
     }
 
     const endpoint = "https://fastzix.in/api/v1/order";
@@ -32,7 +39,7 @@ export async function POST(req: Request) {
       udf1: String(userId),
       udf2: String(userPhone),
     };
-    console.log('Fastzix payload:', payload);
+    console.log('Fastzix payload:', JSON.stringify(payload));
 
     const xVerify = generateHmacSignature(payload, api_key);
 
