@@ -35,6 +35,9 @@ export default async function handler(req, res) {
     udf2: "",
   };
 
+  // Debug: log the payload
+  console.log('Fastzix payload:', payload);
+
   // Generate HMAC signature using payload + api_key
   const xVerify = generateHmacSignature({ ...payload, api_key }, api_key);
 
@@ -48,6 +51,8 @@ export default async function handler(req, res) {
       body: JSON.stringify(payload),
     });
     const data = await response.json();
+    // Debug: log the response
+    console.log('Fastzix response:', data);
     res.status(200).json(data);
   } catch (err) {
     res.status(500).json({ error: err.message });
