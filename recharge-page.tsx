@@ -163,21 +163,6 @@ export default function RechargePage() {
             </div>
           </div>
 
-          {/* Phone Number Input (always shown if not valid) */}
-          {(userPhone && !/^\d{10,15}$/.test(userPhone)) && (
-            <div className="mb-6">
-              <h3 className="text-gray-800 font-semibold text-lg mb-4">Phone Number</h3>
-              <Input
-                type="tel"
-                placeholder="Enter your phone number"
-                value={userPhone}
-                onChange={handlePhoneChange}
-                className="w-full h-12 bg-blue-50 border-2 border-blue-200 rounded-xl px-4 text-gray-700 placeholder-gray-400 focus:border-blue-400"
-                maxLength={15}
-              />
-            </div>
-          )}
-
           {/* Payment Method Image Placeholder */}
           <div className="mb-4">
             <div className="w-16 h-10 bg-gray-100 rounded border flex items-center justify-center">
@@ -218,8 +203,24 @@ export default function RechargePage() {
         </Card>
       </div>
 
-      {/* Recharge Now Button */}
+      {/* Recharge Now Button Section */}
       <div className="mx-4 mb-20">
+        {/* Phone Number Input (always shown if not valid) */}
+        {(!userPhone || !/^\d{10,15}$/.test(userPhone)) && (
+          <div className="mb-6">
+            <label htmlFor="phone-input" className="block text-gray-800 font-semibold text-lg mb-2">Phone Number</label>
+            <Input
+              id="phone-input"
+              type="tel"
+              placeholder="Enter your phone number (10-15 digits)"
+              value={userPhone}
+              onChange={handlePhoneChange}
+              className="w-full h-12 bg-blue-50 border-2 border-blue-200 rounded-xl px-4 text-gray-700 placeholder-gray-400 focus:border-blue-400"
+              maxLength={15}
+              autoFocus
+            />
+          </div>
+        )}
         {error && <div className="mb-2 text-red-600 text-center font-medium">{error}</div>}
         <Button
           onClick={handleRechargeNow}
