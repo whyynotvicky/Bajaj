@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import Link from "next/link"
+import { startFastzixPayment } from "./lib/fastzix"
+import { getAuth } from "firebase/auth"
 
 export default function RechargePage() {
   const [rechargeAmount, setRechargeAmount] = useState("")
@@ -21,20 +23,26 @@ export default function RechargePage() {
     setSelectedChannel(channel)
   }
 
-  const handleRechargeNow = () => {
+  const handleRechargeNow = async () => {
     if (!rechargeAmount) {
       alert("Please enter or select a recharge amount")
       return
     }
-
-    const channelName = selectedChannel === "channelA" ? "Channel A" : "Channel B"
-    alert(`Processing recharge of Rs ${rechargeAmount} through ${channelName}...`)
-
-    // In real app: integrate with payment gateway
-    // Simulate payment processing
-    setTimeout(() => {
-      alert("Recharge successful! Your account has been credited.")
-    }, 2000)
+    const auth = getAuth()
+    const user = auth.currentUser
+    if (!user) {
+      alert("Please log in first.")
+      return
+    }
+    let userPhone = user.phoneNumber
+    if (!userPhone) {
+      userPhone = prompt('Enter your mobile number for payment:') || ''
+    }
+    if (!userPhone) {
+      alert('Mobile number is required for payment.')
+      return
+    }
+    await startFastzixPayment({ amount: Number(rechargeAmount), userId: user.uid, userPhone })
   }
 
   const handleCustomerService = () => {
