@@ -1,3 +1,16 @@
+import crypto from 'crypto';
+
+function generateHmacSignature(payload, apiKey) {
+  const sortedKeys = Object.keys(payload).sort();
+  const signatureString = sortedKeys
+    .map(key => `${key}=${payload[key]}`)
+    .join('&');
+  return crypto
+    .createHmac('sha256', apiKey)
+    .update(signatureString)
+    .digest('hex');
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -22,10 +35,16 @@ export default async function handler(req, res) {
     api_key,
   };
 
+  // Generate HMAC signature
+  const xVerify = generateHmacSignature(payload, api_key);
+
   try {
     const response = await fetch(endpoint, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { 
+        "Content-Type": "application/json",
+        "X-Verify": xVerify
+      },
       body: JSON.stringify(payload),
     });
     const data = await response.json();
