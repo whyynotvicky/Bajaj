@@ -1,12 +1,10 @@
 import crypto from 'crypto';
 
 function generateHmacSignature(payload, apiKey) {
+  // Fastzix expects keys sorted alphabetically, joined with |, and api_key last
   const sortedKeys = Object.keys(payload).sort();
   const signatureString = [...sortedKeys.map(key => `${key}=${payload[key]}`), `api_key=${apiKey}`].join('|');
-  return crypto
-    .createHmac('sha256', apiKey)
-    .update(signatureString)
-    .digest('hex');
+  return crypto.createHmac('sha256', apiKey).update(signatureString).digest('hex');
 }
 
 export default async function handler(req, res) {
@@ -22,6 +20,7 @@ export default async function handler(req, res) {
   const redirect_url = "https://bajaj-fd278.web.app/payment-callback";
   const currency = "INR";
 
+  // Ensure udf2 is present (even if empty)
   const payload = {
     customer_mobile: userPhone,
     merch_id,
@@ -33,24 +32,26 @@ export default async function handler(req, res) {
     udf2: "",
   };
 
-  // Debug: log the payload
-  console.log('Fastzix payload:', payload);
+  // Log the payload for debugging
+  console.log('Fastzix payload:', JSON.stringify(payload));
 
-  // Generate HMAC signature using | separator and api_key as last key
+  // Generate signature
   const xVerify = generateHmacSignature(payload, api_key);
+  console.log('Fastzix signature string:', [...Object.keys(payload).sort().map(key => `${key}=${payload[key]}`), `api_key=${api_key}`].join('|'));
+  console.log('Fastzix xVerify:', xVerify);
 
   try {
     const response = await fetch(endpoint, {
       method: "POST",
-      headers: { 
+      headers: {
         "Content-Type": "application/json",
-        "X-Verify": xVerify
+        "X-VERIFY": xVerify
       },
       body: JSON.stringify(payload),
     });
     const data = await response.json();
-    // Debug: log the response
-    console.log('Fastzix response:', data);
+    // Log the response for debugging
+    console.log('Fastzix response:', JSON.stringify(data));
     res.status(200).json(data);
   } catch (err) {
     res.status(500).json({ error: err.message });
