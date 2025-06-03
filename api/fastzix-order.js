@@ -32,6 +32,7 @@ export default async function handler(req, res) {
     currency,
     redirect_url,
     udf1: userId,
+    udf2: "",
     api_key,
   };
 
