@@ -21,12 +21,13 @@ export default function RechargePage() {
   useEffect(() => {
     const auth = getAuth()
     const user = auth.currentUser
-    if (user && user.phoneNumber) {
+    if (user && user.phoneNumber && /^\d{10,15}$/.test(user.phoneNumber)) {
       setUserPhone(user.phoneNumber)
+      localStorage.setItem('userPhone', user.phoneNumber)
     } else {
       // Try to get from localStorage if previously saved
       const storedPhone = localStorage.getItem('userPhone')
-      if (storedPhone) setUserPhone(storedPhone)
+      if (storedPhone && /^\d{10,15}$/.test(storedPhone)) setUserPhone(storedPhone)
     }
   }, [])
 
@@ -162,7 +163,7 @@ export default function RechargePage() {
             </div>
           </div>
 
-          {/* Phone Number Input (if needed) */}
+          {/* Phone Number Input (always shown if not valid) */}
           {(userPhone && !/^\d{10,15}$/.test(userPhone)) && (
             <div className="mb-6">
               <h3 className="text-gray-800 font-semibold text-lg mb-4">Phone Number</h3>
