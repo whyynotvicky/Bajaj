@@ -35,7 +35,7 @@ export default async function handler(req, res) {
     udf2: "",
   };
 
-  // Generate HMAC signature
+  // Generate HMAC signature using payload + api_key
   const xVerify = generateHmacSignature({ ...payload, api_key }, api_key);
 
   try {
