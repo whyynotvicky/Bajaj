@@ -1,63 +1,134 @@
 import { NextResponse } from 'next/server';
-import crypto from 'crypto';
+import { getFirestore } from 'firebase-admin/firestore';
+import { initializeApp, getApps, cert } from 'firebase-admin/app';
 
-function generateHmacSignature(payload: Record<string, string>, apiKey: string): string {
-  const sortedKeys = Object.keys(payload).sort();
-  const dataString = sortedKeys.map(key => `${key}=${payload[key]}`).join('|');
-  return crypto.createHmac('sha256', apiKey).update(dataString).digest('hex');
+const FASTZIX_MERCH_ID = process.env.FASTZIX_MERCH_ID;
+const FASTZIX_API_KEY = process.env.FASTZIX_API_KEY || '';
+const NEXT_PUBLIC_APP_URL = process.env.NEXT_PUBLIC_APP_URL;
+
+// Initialize Firebase Admin if not already initialized
+if (!getApps().length) {
+  initializeApp({
+    credential: cert({
+      projectId: process.env.FIREBASE_PROJECT_ID,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+    }),
+  });
 }
 
-export async function POST(req: Request) {
+const db = getFirestore();
+
+if (!FASTZIX_MERCH_ID || !FASTZIX_API_KEY || !NEXT_PUBLIC_APP_URL) {
+  console.error('Missing required environment variables for Fastzix integration');
+  // Consider throwing an error or returning an appropriate response here
+  // throw new Error('Missing required environment variables for Fastzix integration');
+}
+
+export async function POST(request: Request) {
   try {
-    const { amount, userId, userPhone } = await req.json();
-    
-    // Robust validation for all required fields
-    if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
-      return NextResponse.json({ error: 'Invalid or missing amount for Fastzix payment.' }, { status: 400 });
-    }
-    if (!userId || typeof userId !== 'string' || userId.trim() === '') {
-      return NextResponse.json({ error: 'Missing userId for Fastzix payment.' }, { status: 400 });
-    }
-    // Strictly require a valid phone number for Fastzix payment
-    if (!userPhone || typeof userPhone !== 'string' || !/^\d{10,15}$/.test(userPhone)) {
-      return NextResponse.json({ error: 'A valid phone number (10-15 digits) is required for payment.' }, { status: 400 });
-    }
-    const endpoint = "https://fastzix.in/api/v1/order";
-    const merch_id = process.env.FASTZIX_MERCH_ID || "MM96ZRCC30UQ1748759109";
-    const api_key = process.env.FASTZIX_API_KEY || "3kfXy3ZN9VPj7Yyn4Qb6T0N0cesRnIXo";
-    const order_id = "ORD" + Date.now() + Math.floor(Math.random() * 1000000);
-    const redirect_url = process.env.NEXT_PUBLIC_APP_URL + "/payment-callback";
-    const currency = "INR";
+    const { amount, userId, userPhone } = await request.json();
 
-    const payload = {
-      customer_mobile: String(userPhone),
-      merch_id: String(merch_id),
-      amount: String(amount),
-      order_id: String(order_id),
-      currency: String(currency),
-      redirect_url: String(redirect_url),
-      udf1: String(userId),
-      udf2: String(userPhone),
+    if (!FASTZIX_MERCH_ID || !FASTZIX_API_KEY || !NEXT_PUBLIC_APP_URL) {
+       return NextResponse.json(
+        { error: 'Server configuration error: Payment gateway not fully configured.' },
+        { status: 500 }
+      );
+    }
+
+    if (!amount || !userId || !userPhone) {
+      console.error('Missing required parameters in request body', { amount, userId, userPhone });
+      return NextResponse.json(
+        { error: 'Missing required parameters' },
+        { status: 400 }
+      );
+    }
+
+    // Generate unique order ID
+    const orderId = 'ORD' + Date.now() + Math.floor(Math.random() * 1000000);
+
+    // Prepare the request data - ensuring types match documentation
+    const data = {
+      customer_mobile: parseInt(userPhone), // Cast to integer
+      merch_id: FASTZIX_MERCH_ID,
+      amount: amount.toString(), // Cast to string
+      order_id: orderId,
+      currency: 'INR',
+      redirect_url: `${NEXT_PUBLIC_APP_URL}wallet/rechargerecord`,
+      udf1: userId,
+      udf2: 'RechargePayment',
+      udf3: 'web',
+      udf4: 'recharge',
+      udf5: orderId,
     };
-    console.log('Fastzix payload:', JSON.stringify(payload));
 
-    const xVerify = generateHmacSignature(payload, api_key);
+    // Generate xverify signature
+    const xverify = generateXverify(data, FASTZIX_API_KEY);
 
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-VERIFY": xVerify
-      },
-      body: JSON.stringify(payload),
+    console.log('Sending Fastzix order request with payload:', data);
+    console.log('X-VERIFY header:', xverify);
+
+    // Create a transaction record in Firestore
+    await db.collection('transactions').doc(orderId).set({
+      userId,
+      userPhone,
+      amount: amount,
+      orderId,
+      status: 'PENDING',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     });
 
-    const data = await response.json();
-    return NextResponse.json(data);
+    // Make request to Fastzix API
+    const response = await fetch('https://fastzix.in/api/v1/order', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-VERIFY': xverify,
+      },
+      body: JSON.stringify(data),
+    });
+
+    const responseData = await response.json();
+
+    console.log('Received Fastzix order response (status: %s):', response.status, responseData);
+
+    if (!response.ok) {
+      console.error('Fastzix API Error:', responseData);
+      return NextResponse.json(
+        { error: 'Payment gateway error', details: responseData },
+        { status: response.status }
+      );
+    }
+
+    return NextResponse.json(responseData);
   } catch (error: any) {
+    console.error('Payment processing error:', error);
     return NextResponse.json(
-      { error: error.message || 'Internal server error' },
+      { error: 'Internal server error', message: error.message },
       { status: 500 }
     );
   }
+}
+
+function generateXverify(data: Record<string, any>, secretKey: string): string {
+  // Sort the data object by keys
+  const sortedData = Object.keys(data)
+    .sort()
+    .reduce((acc: Record<string, any>, key) => {
+      acc[key] = data[key];
+      return acc;
+    }, {});
+
+  // Create the data string
+  const dataString = Object.entries(sortedData)
+    .map(([key, value]) => `${key}=${value}`)
+    .join('|');
+
+  // Generate HMAC SHA-256 hash
+  const crypto = require('crypto');
+  return crypto
+    .createHmac('sha256', secretKey)
+    .update(dataString)
+    .digest('hex');
 } 

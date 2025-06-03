@@ -5,6 +5,12 @@ export async function startFastzixPayment({ amount, userId, userPhone, onError }
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ amount, userId, userPhone }),
     });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to create payment order');
+    }
+
     const data = await response.json();
     if (data.status && data.result && data.result.payment_url) {
       window.location.href = data.result.payment_url;

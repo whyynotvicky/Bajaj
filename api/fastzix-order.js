@@ -20,19 +20,19 @@ export default async function handler(req, res) {
   const redirect_url = "https://bajaj-fd278.web.app/payment-callback";
   const currency = "INR";
 
-  // Ensure udf2 is present (even if empty)
+  // All values as strings, udf2 as 'test'
   const payload = {
-    customer_mobile: userPhone,
-    merch_id,
-    amount,
-    order_id,
-    currency,
-    redirect_url,
-    udf1: userId,
-    udf2: "",
+    customer_mobile: String(userPhone),
+    merch_id: String(merch_id),
+    amount: String(amount),
+    order_id: String(order_id),
+    currency: String(currency),
+    redirect_url: String(redirect_url),
+    udf1: String(userId),
+    udf2: "test",
   };
 
-  // Log the payload for debugging
+  // Log for debugging
   console.log('Fastzix payload:', JSON.stringify(payload));
 
   // Generate signature
