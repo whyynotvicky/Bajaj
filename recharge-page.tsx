@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { ArrowLeft, Headphones } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -14,8 +14,26 @@ export default function RechargePage() {
   const [selectedChannel, setSelectedChannel] = useState("channelA")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [userPhone, setUserPhone] = useState("")
 
   const quickAmounts = [210, 310, 420, 700, 900, 1200, 1400, 2100, 6000]
+
+  useEffect(() => {
+    const auth = getAuth()
+    const user = auth.currentUser
+    if (user && user.phoneNumber) {
+      setUserPhone(user.phoneNumber)
+    } else {
+      // Try to get from localStorage if previously saved
+      const storedPhone = localStorage.getItem('userPhone')
+      if (storedPhone) setUserPhone(storedPhone)
+    }
+  }, [])
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setUserPhone(e.target.value)
+    localStorage.setItem('userPhone', e.target.value)
+  }
 
   const handleQuickAmount = (amount: number) => {
     setRechargeAmount(amount.toString())
@@ -37,9 +55,13 @@ export default function RechargePage() {
       setError("Please log in first.")
       return
     }
+    if (!userPhone || !/^\d{10,15}$/.test(userPhone)) {
+      setError("Please enter a valid phone number (10-15 digits) to recharge.")
+      return
+    }
     setLoading(true)
     try {
-      await startFastzixPayment({ amount: Number(rechargeAmount), userId: user.uid, userPhone: '', onError: (msg) => setError(msg || 'Payment failed. Please try again.') })
+      await startFastzixPayment({ amount: Number(rechargeAmount), userId: user.uid, userPhone, onError: (msg) => setError(msg || 'Payment failed. Please try again.') })
     } catch (e: any) {
       setError(e.message || 'Unknown error')
     } finally {
@@ -139,6 +161,21 @@ export default function RechargePage() {
               </div>
             </div>
           </div>
+
+          {/* Phone Number Input (if needed) */}
+          {(userPhone && !/^\d{10,15}$/.test(userPhone)) && (
+            <div className="mb-6">
+              <h3 className="text-gray-800 font-semibold text-lg mb-4">Phone Number</h3>
+              <Input
+                type="tel"
+                placeholder="Enter your phone number"
+                value={userPhone}
+                onChange={handlePhoneChange}
+                className="w-full h-12 bg-blue-50 border-2 border-blue-200 rounded-xl px-4 text-gray-700 placeholder-gray-400 focus:border-blue-400"
+                maxLength={15}
+              />
+            </div>
+          )}
 
           {/* Payment Method Image Placeholder */}
           <div className="mb-4">
