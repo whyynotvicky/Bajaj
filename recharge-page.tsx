@@ -27,8 +27,8 @@ export default function RechargePage() {
 
   const handleRechargeNow = async () => {
     setError("")
-    if (!rechargeAmount) {
-      setError("Please enter or select a recharge amount")
+    if (!rechargeAmount || isNaN(Number(rechargeAmount)) || Number(rechargeAmount) <= 0) {
+      setError("Please enter or select a valid recharge amount")
       return
     }
     const auth = getAuth()
@@ -39,15 +39,15 @@ export default function RechargePage() {
     }
     let userPhone = user.phoneNumber
     if (!userPhone) {
-      userPhone = prompt('Enter your mobile number for payment:') || ''
+      userPhone = prompt('Enter your mobile number for payment:')?.trim() || ''
     }
-    if (!userPhone) {
-      setError('Mobile number is required for payment.')
+    if (!userPhone || !/^\d{10,15}$/.test(userPhone)) {
+      setError('A valid mobile number is required for payment.')
       return
     }
     setLoading(true)
     try {
-      await startFastzixPayment({ amount: Number(rechargeAmount), userId: user.uid, userPhone, onError: setError })
+      await startFastzixPayment({ amount: Number(rechargeAmount), userId: user.uid, userPhone, onError: (msg) => setError(msg || 'Payment failed. Please try again.') })
     } catch (e: any) {
       setError(e.message || 'Unknown error')
     } finally {
