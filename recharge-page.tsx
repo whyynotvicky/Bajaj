@@ -37,14 +37,9 @@ export default function RechargePage() {
       setError("Please log in first.")
       return
     }
-    const userPhone = user.phoneNumber
-    if (!userPhone || !/^\d{10,15}$/.test(userPhone)) {
-      setError('Your account does not have a valid mobile number. Please update your profile with a valid phone number to recharge.')
-      return
-    }
     setLoading(true)
     try {
-      await startFastzixPayment({ amount: Number(rechargeAmount), userId: user.uid, userPhone, onError: (msg) => setError(msg || 'Payment failed. Please try again.') })
+      await startFastzixPayment({ amount: Number(rechargeAmount), userId: user.uid, userPhone: '', onError: (msg) => setError(msg || 'Payment failed. Please try again.') })
     } catch (e: any) {
       setError(e.message || 'Unknown error')
     } finally {
