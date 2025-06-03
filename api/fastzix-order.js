@@ -2,9 +2,7 @@ import crypto from 'crypto';
 
 function generateHmacSignature(payload, apiKey) {
   const sortedKeys = Object.keys(payload).sort();
-  const signatureString = sortedKeys
-    .map(key => `${key}=${payload[key]}`)
-    .join('&');
+  const signatureString = [...sortedKeys.map(key => `${key}=${payload[key]}`), `api_key=${apiKey}`].join('|');
   return crypto
     .createHmac('sha256', apiKey)
     .update(signatureString)
@@ -38,8 +36,8 @@ export default async function handler(req, res) {
   // Debug: log the payload
   console.log('Fastzix payload:', payload);
 
-  // Generate HMAC signature using payload + api_key
-  const xVerify = generateHmacSignature({ ...payload, api_key }, api_key);
+  // Generate HMAC signature using | separator and api_key as last key
+  const xVerify = generateHmacSignature(payload, api_key);
 
   try {
     const response = await fetch(endpoint, {
