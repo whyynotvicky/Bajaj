@@ -129,6 +129,8 @@ export async function POST(request: Request) {
       udf1: userId, // User ID for your reference
       udf2: 'Recharge', // Added missing required parameter
       udf3: userPhone, // Added missing required parameter
+      udf4: 'NextJS', // Added likely missing required parameter
+      udf5: orderId, // Added likely missing required parameter
     };
 
     // TODO: Generate xverify signature as per Fastzix docs
