@@ -127,6 +127,7 @@ export async function POST(request: Request) {
       currency: 'INR', // Assuming INR, adjust if needed
       redirect_url: redirectUrl,
       udf1: userId, // User ID for your reference
+      udf2: 'Recharge', // Added missing required parameter
     };
 
     // TODO: Generate xverify signature as per Fastzix docs
