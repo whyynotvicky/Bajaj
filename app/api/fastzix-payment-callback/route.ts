@@ -26,6 +26,9 @@ if (!getApps().length) {
 const db = getApps().length ? getFirestore() : null; // Only get Firestore if app was initialized
 
 export async function POST(request: Request) {
+    // Add a specific route identifier to avoid conflicts
+    const routeIdentifier = 'fastzix-payment-callback';
+    
     // Basic check for essential environment variable for signature verification
     if (!FASTZIX_API_KEY) {
         console.error('Missing essential Fastzix API key for signature verification in callback');
