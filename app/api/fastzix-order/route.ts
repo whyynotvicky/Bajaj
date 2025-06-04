@@ -10,18 +10,26 @@ const NEXT_PUBLIC_APP_URL = process.env.NEXT_PUBLIC_APP_URL;
 
 // Initialize Firebase Admin if not already initialized
 if (!getApps().length) {
-  // Check if Firebase environment variables are set
-  if (!process.env.FIREBASE_PROJECT_ID || !process.env.FIREBASE_CLIENT_EMAIL || !process.env.FIREBASE_PRIVATE_KEY) {
-    console.error('Missing Firebase environment variables');
+  const firebaseAdminSdkJsonBase64 = process.env.FIREBASE_ADMIN_SDK_JSON_BASE64;
+  
+  // Check if the base64 encoded JSON variable is set
+  if (!firebaseAdminSdkJsonBase64) {
+    console.error('Missing FIREBASE_ADMIN_SDK_JSON_BASE64 environment variable');
     // Depending on your app structure, you might want to handle this more gracefully
   } else {
-    initializeApp({
-      credential: cert({
-        projectId: process.env.FIREBASE_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'), // Handle newline characters
-      }),
-    });
+    try {
+      // Decode the base64 string and parse it as JSON
+      const decodedJsonString = Buffer.from(firebaseAdminSdkJsonBase64, 'base64').toString('utf-8');
+      const serviceAccount = JSON.parse(decodedJsonString);
+      
+      initializeApp({
+        credential: cert(serviceAccount),
+      });
+      console.log('Firebase Admin SDK initialized successfully using base64 encoded key.');
+    } catch (error) {
+      console.error('Failed to initialize Firebase Admin SDK from base64 key:', error);
+       // Handle parsing or initialization errors
+    }
   }
 }
 
