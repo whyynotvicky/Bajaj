@@ -38,7 +38,12 @@ const db = getApps().length ? getFirestore() : null; // Only get Firestore if ap
 export async function POST(request: Request) {
   // Basic check for essential environment variables for Fastzix
   if (!FASTZIX_MERCH_ID || !FASTZIX_API_KEY || !NEXT_PUBLIC_APP_URL) {
-    console.error('Missing essential Fastzix environment variables');
+    console.error('Missing essential Fastzix environment variables:', {
+      hasMerchId: !!FASTZIX_MERCH_ID,
+      hasApiKey: !!FASTZIX_API_KEY,
+      hasAppUrl: !!NEXT_PUBLIC_APP_URL,
+      appUrl: NEXT_PUBLIC_APP_URL
+    });
     return NextResponse.json(
       { error: 'Server configuration error: Payment gateway not fully configured.' },
       { status: 500 }
@@ -56,6 +61,7 @@ export async function POST(request: Request) {
 
   try {
     const { amount, userId, userPhone } = await request.json();
+    console.log('Received payment request:', { amount, userId, userPhone });
 
     // Validate incoming request parameters
     if (!amount || typeof amount !== 'number' || amount <= 0) {
@@ -92,6 +98,7 @@ export async function POST(request: Request) {
     // Generate unique order ID
     const orderId = 'ORD' + Date.now() + Math.floor(Math.random() * 1000000);
     const redirectUrl = `${NEXT_PUBLIC_APP_URL}wallet/rechargerecord`; // Use configured redirect URL
+    console.log('Generated redirect URL:', redirectUrl);
 
     // Prepare the request data for Fastzix - Strictly following documentation types
     const data: Record<string, any> = {
@@ -114,80 +121,89 @@ export async function POST(request: Request) {
     console.log('Sending Fastzix order request with payload:', JSON.stringify(data));
     console.log('X-VERIFY header:', xverify);
 
-    // Create a transaction record in Firestore BEFORE calling Fastzix
-    const transactionRef = db.collection('transactions').doc(orderId);
-    await transactionRef.set({
-      userId,
-      userPhone,
-      amount: amount, // Store original number amount
-      orderId,
-      status: 'PENDING', // Initial status
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      fastzixRequestPayload: data, // Store payload sent to Fastzix for debugging
-      fastzixResponse: null, // Placeholder for Fastzix response
-    });
-     console.log('Firestore transaction record created for orderId:', orderId);
+    try {
+      // Create a transaction record in Firestore BEFORE calling Fastzix
+      const transactionRef = db.collection('transactions').doc(orderId);
+      await transactionRef.set({
+        userId,
+        userPhone,
+        amount: amount, // Store original number amount
+        orderId,
+        status: 'PENDING', // Initial status
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        fastzixRequestPayload: data, // Store payload sent to Fastzix for debugging
+        fastzixResponse: null, // Placeholder for Fastzix response
+      });
+      console.log('Firestore transaction record created for orderId:', orderId);
 
-    // Make request to Fastzix API
-    const fastzixApiUrl = 'https://fastzix.in/api/v1/order';
-    const response = await fetch(fastzixApiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-VERIFY': xverify,
-      },
-      body: JSON.stringify(data),
-      // Add a timeout to prevent hanging requests
-      signal: AbortSignal.timeout(15000) // 15 seconds timeout
-    });
+      // Make request to Fastzix API
+      const fastzixApiUrl = 'https://fastzix.in/api/v1/order';
+      console.log('Making request to Fastzix API:', fastzixApiUrl);
+      
+      const response = await fetch(fastzixApiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-VERIFY': xverify,
+        },
+        body: JSON.stringify(data),
+        // Add a timeout to prevent hanging requests
+        signal: AbortSignal.timeout(15000) // 15 seconds timeout
+      });
 
-    const responseData = await response.json();
+      const responseData = await response.json();
+      console.log('Fastzix API Response:', {
+        status: response.status,
+        statusText: response.statusText,
+        data: responseData
+      });
 
-    console.log('Received Fastzix order response (status: %s):', response.status, JSON.stringify(responseData));
+      // Update the transaction record with Fastzix response
+      await transactionRef.update({
+        fastzixResponse: responseData,
+        updatedAt: new Date().toISOString(),
+      });
+      console.log('Updated transaction record with Fastzix response');
 
-    // Update the transaction record with Fastzix response
-    await transactionRef.update({
-      fastzixResponse: responseData,
-      updatedAt: new Date().toISOString(),
-      // Optionally update status based on initial response before redirect
-      // status: responseData.status === true ? 'REDIRECTING' : 'FAILED',
-    });
-    console.log('Firestore transaction record updated with Fastzix response for orderId:', orderId);
+      if (!response.ok) {
+        console.error('Fastzix API returned non-OK status:', {
+          status: response.status,
+          statusText: response.statusText,
+          data: responseData
+        });
+        await transactionRef.update({ status: 'FAILED' });
+        return NextResponse.json(
+          { error: 'Payment gateway error', details: responseData },
+          { status: response.status }
+        );
+      }
 
-    if (!response.ok) {
-      console.error('Fastzix API returned non-OK status:', response.status, responseData);
-      // You might want to update the transaction status to FAILED here as well
-       await transactionRef.update({ status: 'FAILED' });
+      // Check Fastzix specific success status and payment_url
+      if (responseData.status === true && responseData.result && responseData.result.payment_url) {
+        console.log('Payment URL received:', responseData.result.payment_url);
+        await transactionRef.update({ status: 'REDIRECTING' });
+        return NextResponse.json({
+          success: true,
+          payment_url: responseData.result.payment_url
+        });
+      } else {
+        console.error('Invalid Fastzix response:', responseData);
+        await transactionRef.update({ status: 'FAILED' });
+        return NextResponse.json(
+          { error: 'Failed to generate payment URL from Fastzix', details: responseData },
+          { status: 400 }
+        );
+      }
+    } catch (error: any) {
+      console.error('Error in Fastzix API call or Firestore operation:', error);
       return NextResponse.json(
-        { error: 'Payment gateway error', details: responseData, status: response.status },
-        { status: response.status }
+        { error: 'Payment processing error', message: error.message },
+        { status: 500 }
       );
     }
-
-    // Check Fastzix specific success status and payment_url
-    if (responseData.status === true && responseData.result && responseData.result.payment_url) {
-       console.log('Fastzix payment URL received:', responseData.result.payment_url);
-        // Update status to REDIRECTING or similar
-       await transactionRef.update({ status: 'REDIRECTING' });
-       return NextResponse.json({
-         success: true,
-         payment_url: responseData.result.payment_url
-       });
-    } else {
-       console.error('Fastzix response indicates failure or missing payment_url:', responseData);
-        // Update status to FAILED
-       await transactionRef.update({ status: 'FAILED' });
-       return NextResponse.json(
-         { error: 'Failed to generate payment URL from Fastzix', details: responseData },
-         { status: 400 }
-       );
-    }
-
   } catch (error: any) {
-    console.error('Payment processing exception:', error);
-    // Consider how to handle errors that occur BEFORE Firestore transaction is created
-    // If a transactionRef was created, you might try to update its status to FAILED
+    console.error('Error processing payment request:', error);
     return NextResponse.json(
       { error: 'Internal server error', message: error.message },
       { status: 500 }
