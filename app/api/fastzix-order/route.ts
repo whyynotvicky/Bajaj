@@ -130,7 +130,7 @@ export async function POST(request: Request) {
       udf2: 'Recharge', // Added missing required parameter
       udf3: userPhone, // Added missing required parameter
       udf4: 'NextJS', // Added likely missing required parameter
-      udf5: orderId, // Added likely missing required parameter
+      udf5: orderId.substring(0, 20), // Use first 20 characters of orderId for Fastzix constraint
     };
 
     // TODO: Generate xverify signature as per Fastzix docs
