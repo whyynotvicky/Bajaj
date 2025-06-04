@@ -126,7 +126,7 @@ export async function POST(request: Request) {
       order_id: orderId,
       currency: 'INR', // Assuming INR, adjust if needed
       redirect_url: redirectUrl,
-      udf1: userId, // User ID for your reference
+      udf1: userId.substring(0, 20), // Use first 20 characters of userId for Fastzix constraint
       udf2: 'Recharge', // Added missing required parameter
       udf3: userPhone, // Added missing required parameter
       udf4: 'NextJS', // Added likely missing required parameter
