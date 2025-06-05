@@ -1,11 +1,14 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { ArrowLeft, Calculator, Edit, Headphones } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import Link from "next/link"
+import { getAuth, onAuthStateChanged } from "firebase/auth"
+import { doc, getDoc, updateDoc, serverTimestamp, setDoc } from "firebase/firestore"
+import { db } from "@/lib/firebase"
 
 interface WithdrawalTransaction {
   id: string
@@ -17,21 +20,34 @@ interface WithdrawalTransaction {
 }
 
 export default function WithdrawPage() {
-  const [accountBalance] = useState(17.0)
-  const [bankAccount] = useState("40510017")
+  const [user, setUser] = useState<any | null>(null)
+  const [accountBalance, setAccountBalance] = useState(0)
+  const [bankAccount, setBankAccount] = useState("")
   const [withdrawAmount, setWithdrawAmount] = useState("")
   const [isLoading, setIsLoading] = useState(false)
-  const [transactions] = useState<WithdrawalTransaction[]>([
-    // Uncomment to show sample transactions
-    // {
-    //   id: "WD123456",
-    //   amount: 1000,
-    //   date: "2025-01-15 14:30",
-    //   status: "completed",
-    //   taxAmount: 100,
-    //   netAmount: 900
-    // }
-  ])
+  const [transactions] = useState<WithdrawalTransaction[]>([])
+
+  useEffect(() => {
+    const auth = getAuth()
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setUser(firebaseUser)
+      if (firebaseUser) {
+        try {
+          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid))
+          if (userDoc.exists()) {
+            const userData = userDoc.data()
+            setAccountBalance(userData.balance || 0)
+            if (userData.bankCard) {
+              setBankAccount(userData.bankCard.accountNumber)
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching user data:', error)
+        }
+      }
+    })
+    return () => unsubscribe()
+  }, [])
 
   const TAX_RATE = 0.1 // 10%
   const MIN_WITHDRAWAL = 180
@@ -66,6 +82,11 @@ export default function WithdrawPage() {
   }
 
   const handleWithdraw = async () => {
+    if (!user) {
+      alert("Please login to withdraw")
+      return
+    }
+
     const validation = validateWithdrawal(withdrawAmount)
 
     if (!validation.isValid) {
@@ -102,20 +123,34 @@ Do you want to proceed?`
     setIsLoading(true)
 
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+      const userRef = doc(db, 'users', user.uid)
+      const userDoc = await getDoc(userRef)
+      
+      if (!userDoc.exists()) {
+        throw new Error("User not found")
+      }
 
-      // In real app: send withdrawal request to API
-      // const response = await fetch('/api/withdraw', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({
-      //     amount: amount,
-      //     bankAccount: bankAccount,
-      //     taxAmount: taxAmount,
-      //     netAmount: netAmount
-      //   })
-      // })
+      const currentBalance = userDoc.data().balance || 0
+      if (currentBalance < amount) {
+        throw new Error("Insufficient balance")
+      }
+
+      // Update user's balance
+      await updateDoc(userRef, {
+        balance: currentBalance - amount
+      })
+
+      // Create withdrawal record
+      const withdrawalRef = doc(db, 'withdrawals', `${user.uid}_${Date.now()}`)
+      await setDoc(withdrawalRef, {
+        userId: user.uid,
+        amount: amount,
+        taxAmount: taxAmount,
+        netAmount: netAmount,
+        bankAccount: bankAccount,
+        status: "pending",
+        createdAt: serverTimestamp()
+      })
 
       alert(`Withdrawal request submitted successfully!
 Amount: Rs ${amount}
@@ -125,7 +160,9 @@ Net Amount: Rs ${netAmount.toFixed(2)}
 Your request will be processed within 24 hours.`)
 
       setWithdrawAmount("")
+      setAccountBalance(currentBalance - amount)
     } catch (error) {
+      console.error('Error processing withdrawal:', error)
       alert("Failed to process withdrawal. Please try again.")
     } finally {
       setIsLoading(false)
@@ -133,7 +170,6 @@ Your request will be processed within 24 hours.`)
   }
 
   const handleEditBankAccount = () => {
-    alert("Redirecting to bank account management...")
     window.location.href = "/bank/add"
   }
 
@@ -160,7 +196,7 @@ Net Amount: Rs ${netAmount.toFixed(2)}`)
     <div className="min-h-screen bg-gradient-to-br from-blue-400 via-blue-500 to-blue-600">
       {/* Header */}
       <div className="flex items-center justify-between p-4 pt-12">
-        <Link href="/home" className="mr-4">
+        <Link href="/profile" className="mr-4">
           <div className="bg-white/20 backdrop-blur-sm p-3 rounded-2xl border border-white/30">
             <ArrowLeft className="text-white" size={24} />
           </div>
@@ -179,7 +215,7 @@ Net Amount: Rs ${netAmount.toFixed(2)}`)
         <Card className="bg-gray-200 rounded-2xl p-6">
           {/* Account Balance */}
           <div className="mb-6">
-            <div className="text-blue-500 text-2xl font-bold">Rs{accountBalance.toFixed(2)}</div>
+            <div className="text-blue-500 text-2xl font-bold">₹{accountBalance.toFixed(2)}</div>
             <div className="text-gray-600">Account balance</div>
           </div>
 
@@ -221,7 +257,7 @@ Net Amount: Rs ${netAmount.toFixed(2)}`)
               </label>
               <div className="relative">
                 <div className="w-full h-12 bg-gray-100 border-2 border-gray-300 rounded-xl px-4 flex items-center justify-between">
-                  <span className="text-gray-700">{bankAccount} *****</span>
+                  <span className="text-gray-700">{bankAccount ? `${bankAccount} *****` : "No bank account added"}</span>
                   <button onClick={handleEditBankAccount} className="bg-blue-500 hover:bg-blue-600 p-2 rounded-lg">
                     <Edit className="text-white" size={16} />
                   </button>
@@ -232,7 +268,7 @@ Net Amount: Rs ${netAmount.toFixed(2)}`)
             {/* Withdraw Button */}
             <Button
               onClick={handleWithdraw}
-              disabled={isLoading || !withdrawAmount}
+              disabled={isLoading || !withdrawAmount || !bankAccount}
               className="w-full bg-blue-500 hover:bg-blue-600 text-white rounded-xl py-4 font-semibold text-lg disabled:opacity-50"
             >
               {isLoading ? "Processing..." : "Withdraw Now"}
@@ -248,67 +284,24 @@ Net Amount: Rs ${netAmount.toFixed(2)}`)
             <h3 className="font-semibold text-gray-800">Explain</h3>
           </div>
           <div className="space-y-4 text-sm text-gray-700">
-            <p>
-              <span className="font-semibold">1.</span> The daily market promotion time is from 09:00:00 to 16:30:00
-            </p>
-            <p>
-              <span className="font-semibold">2.</span> Single withdrawal amount between {MIN_WITHDRAWAL} and{" "}
-              {MAX_WITHDRAWAL.toLocaleString()}
-            </p>
-            <p>
-              <span className="font-semibold">3.</span> For the convenience of financial settlement, you can only apply
-              for withdrawal 1 times a day
-            </p>
-            <p>
-              <span className="font-semibold">4.</span> Withdrawal tax rate: {(TAX_RATE * 100).toFixed(0)}%
-            </p>
+            <p>• Minimum withdrawal amount: ₹{MIN_WITHDRAWAL}</p>
+            <p>• Maximum withdrawal amount: ₹{MAX_WITHDRAWAL}</p>
+            <p>• Withdrawal time: 09:00:00 to 16:30:00</p>
+            <p>• Processing time: Within 24 hours</p>
+            <p>• Tax rate: {TAX_RATE * 100}%</p>
           </div>
         </Card>
       </div>
 
-      {/* Transaction History */}
+      {/* Customer Service */}
       <div className="mx-4 mb-6">
-        <Card className="bg-gray-200 rounded-2xl p-4">
-          {transactions.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-gray-500 text-lg">No Transactions Found</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <h3 className="font-semibold text-gray-800 mb-4">Recent Withdrawals</h3>
-              {transactions.map((transaction) => (
-                <div key={transaction.id} className="bg-white rounded-xl p-4 flex justify-between items-center">
-                  <div>
-                    <p className="font-medium text-gray-800">Rs {transaction.amount}</p>
-                    <p className="text-sm text-gray-600">Net: Rs {transaction.netAmount}</p>
-                    <p className="text-xs text-gray-500">{transaction.date}</p>
-                  </div>
-                  <span
-                    className={`px-2 py-1 rounded-full text-xs ${
-                      transaction.status === "completed"
-                        ? "bg-green-100 text-green-700"
-                        : transaction.status === "pending"
-                          ? "bg-yellow-100 text-yellow-700"
-                          : "bg-red-100 text-red-700"
-                    }`}
-                  >
-                    {transaction.status.toUpperCase()}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
-      </div>
-
-      {/* Floating Customer Service Buttons */}
-      <div className="fixed right-4 bottom-6 space-y-3">
-        <button onClick={handleCustomerService} className="bg-blue-500 rounded-full p-3 shadow-lg">
-          <Headphones className="text-white" size={20} />
-        </button>
-        <button onClick={handleCustomerService} className="bg-blue-500 rounded-full p-3 shadow-lg">
-          <Headphones className="text-white" size={20} />
-        </button>
+        <Button
+          onClick={handleCustomerService}
+          className="w-full bg-white/20 backdrop-blur-sm text-white rounded-xl py-4 font-semibold text-lg border border-white/30"
+        >
+          <Headphones className="inline-block mr-2" size={20} />
+          Contact Customer Service
+        </Button>
       </div>
     </div>
   )

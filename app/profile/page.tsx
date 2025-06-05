@@ -47,7 +47,7 @@ export default function ProfilePage() {
   }
 
   const handleWithdraw = () => {
-    alert("Redirecting to withdrawal page...")
+    window.location.href = "/withdraw"
   }
 
   const handleOrders = () => {

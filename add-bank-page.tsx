@@ -1,177 +1,153 @@
 "use client"
 
-import type React from "react"
-
-import { useState } from "react"
-import { ArrowLeft, Headphones } from "lucide-react"
+import { useState, useEffect } from "react"
+import { ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import Link from "next/link"
+import { getAuth, onAuthStateChanged } from "firebase/auth"
+import { doc, getDoc, updateDoc } from "firebase/firestore"
+import { db } from "@/lib/firebase"
 
 export default function AddBankPage() {
-  const [accountBalance] = useState(12.0)
-  const [formData, setFormData] = useState({
-    holderName: "",
-    accountNumber: "",
-    ifscCode: "",
-  })
+  const [user, setUser] = useState<any | null>(null)
+  const [holderName, setHolderName] = useState("")
+  const [accountNumber, setAccountNumber] = useState("")
+  const [ifscCode, setIfscCode] = useState("")
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target
-    setFormData((prev) => ({ ...prev, [name]: value }))
-  }
+  useEffect(() => {
+    const auth = getAuth()
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setUser(firebaseUser)
+      if (firebaseUser) {
+        try {
+          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid))
+          if (userDoc.exists()) {
+            const userData = userDoc.data()
+            if (userData.bankCard) {
+              setHolderName(userData.bankCard.holderName || "")
+              setAccountNumber(userData.bankCard.accountNumber || "")
+              setIfscCode(userData.bankCard.ifscCode || "")
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching user data:', error)
+        }
+      }
+      setLoading(false)
+    })
+    return () => unsubscribe()
+  }, [])
 
-  const handleAddBank = () => {
-    // Validate form
-    if (!formData.holderName.trim()) {
-      alert("Please enter account holder name")
-      return
-    }
-    if (!formData.accountNumber.trim()) {
-      alert("Please enter account number")
-      return
-    }
-    if (!formData.ifscCode.trim()) {
-      alert("Please enter IFSC code")
-      return
-    }
-
-    // Validate account number (numbers only)
-    if (!/^\d+$/.test(formData.accountNumber)) {
-      alert("Bank card number cannot contain letters and symbols")
-      return
-    }
-
-    // Validate IFSC code (first 4 letters, 5th digit is 0, total 11 chars)
-    const ifscRegex = /^[A-Z]{4}0\d{6}$/
-    if (!ifscRegex.test(formData.ifscCode)) {
-      alert("IFSC code should be 11 digits, first 4 digits are letters, 5th digit = 0")
+  const handleSave = async () => {
+    if (!user) {
+      alert("Please login to add bank details")
       return
     }
 
-    alert("Bank account added successfully!")
-    // In real app: send to API, update user profile
-    window.location.href = "/profile"
-  }
+    if (!holderName || !accountNumber || !ifscCode) {
+      alert("Please fill in all bank details")
+      return
+    }
 
-  const handleCustomerService = () => {
-    alert("Connecting to customer service...")
+    setSaving(true)
+    try {
+      const userRef = doc(db, 'users', user.uid)
+      console.log("Attempting to save bank details for user:", user.uid);
+      console.log("Saving bankCard data:", { holderName, accountNumber, ifscCode });
+      await updateDoc(userRef, {
+        bankCard: {
+          holderName,
+          accountNumber,
+          ifscCode
+        }
+      })
+      console.log("Bank details saved successfully!");
+      alert("Bank details saved successfully!")
+      window.location.href = "/profile"
+    } catch (error) {
+      console.error('Error saving bank details:', error)
+      alert("Failed to save bank details. Please try again.")
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-400 via-blue-500 to-blue-600">
       {/* Header */}
-      <div className="flex items-center p-4 pt-12">
+      <div className="flex items-center justify-between p-4 pt-12">
         <Link href="/profile" className="mr-4">
           <div className="bg-white/20 backdrop-blur-sm p-3 rounded-2xl border border-white/30">
             <ArrowLeft className="text-white" size={24} />
           </div>
         </Link>
-        <h1 className="text-white text-2xl font-bold">Add bank</h1>
+        <h1 className="text-white text-2xl font-bold">Bank Details</h1>
+        <div className="w-12" /> {/* Spacer for alignment */}
       </div>
 
       {/* Main Content */}
       <div className="mx-4 mb-6">
         <Card className="bg-white rounded-2xl p-6">
-          {/* Balance Section */}
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <div className="text-blue-500 text-2xl font-bold">Rs{accountBalance.toFixed(2)}</div>
-              <div className="text-gray-500">Account balance</div>
-            </div>
-            <div className="w-16 h-16">
-              <img src="/placeholder.svg?height=64&width=64" alt="Gift" className="w-full h-full object-contain" />
-            </div>
-          </div>
-
-          {/* Bank Form */}
           <div className="space-y-6">
+            {/* Account Holder Name */}
             <div>
-              <label htmlFor="holderName" className="block text-gray-600 mb-2">
-                Holder Name
+              <label htmlFor="holderName" className="block text-gray-700 font-medium mb-2">
+                Account Holder Name
               </label>
               <Input
                 id="holderName"
-                name="holderName"
-                placeholder="Account Holder Name"
-                value={formData.holderName}
-                onChange={handleInputChange}
-                className="w-full h-12 border-2 border-gray-200 rounded-xl px-4"
+                type="text"
+                placeholder="Enter account holder name"
+                value={holderName}
+                onChange={(e) => setHolderName(e.target.value)}
+                className="w-full h-12 bg-gray-100 border-2 border-gray-300 rounded-xl px-4 text-gray-700 placeholder-gray-500"
               />
             </div>
 
+            {/* Account Number */}
             <div>
-              <label htmlFor="accountNumber" className="block text-gray-600 mb-2">
+              <label htmlFor="accountNumber" className="block text-gray-700 font-medium mb-2">
                 Account Number
               </label>
               <Input
                 id="accountNumber"
-                name="accountNumber"
-                placeholder="Account Number"
-                value={formData.accountNumber}
-                onChange={handleInputChange}
-                className="w-full h-12 border-2 border-gray-200 rounded-xl px-4"
+                type="text"
+                placeholder="Enter account number"
+                value={accountNumber}
+                onChange={(e) => setAccountNumber(e.target.value)}
+                className="w-full h-12 bg-gray-100 border-2 border-gray-300 rounded-xl px-4 text-gray-700 placeholder-gray-500"
               />
             </div>
 
+            {/* IFSC Code */}
             <div>
-              <label htmlFor="ifscCode" className="block text-gray-600 mb-2">
+              <label htmlFor="ifscCode" className="block text-gray-700 font-medium mb-2">
                 IFSC Code
               </label>
               <Input
                 id="ifscCode"
-                name="ifscCode"
-                placeholder="IFSC Code"
-                value={formData.ifscCode}
-                onChange={handleInputChange}
-                className="w-full h-12 border-2 border-gray-200 rounded-xl px-4"
+                type="text"
+                placeholder="Enter IFSC code"
+                value={ifscCode}
+                onChange={(e) => setIfscCode(e.target.value.toUpperCase())}
+                className="w-full h-12 bg-gray-100 border-2 border-gray-300 rounded-xl px-4 text-gray-700 placeholder-gray-500"
               />
             </div>
 
+            {/* Save Button */}
             <Button
-              onClick={handleAddBank}
-              className="w-full bg-blue-500 hover:bg-blue-600 text-white rounded-xl py-3 font-medium"
+              onClick={handleSave}
+              disabled={saving || loading}
+              className="w-full bg-blue-500 hover:bg-blue-600 text-white rounded-xl py-4 font-semibold text-lg disabled:opacity-50"
             >
-              Add bank
+              {saving ? "Saving..." : "Save Bank Details"}
             </Button>
           </div>
         </Card>
-      </div>
-
-      {/* Explain Section */}
-      <div className="mx-4 mb-6">
-        <Card className="bg-white rounded-2xl p-4">
-          <div className="border-l-4 border-yellow-400 pl-3 mb-4">
-            <h3 className="font-semibold text-gray-800">Explain</h3>
-          </div>
-          <div className="space-y-4 text-sm text-gray-700">
-            <p>
-              <span className="font-semibold">1.</span> Bank card number cannot contain letters and symbols
-            </p>
-            <p>
-              <span className="font-semibold">2.</span> IFSC is 11 digits, the first 4 digits are letters, representing
-              the bank number, the 5th digit = 0
-            </p>
-            <p>
-              <span className="font-semibold">3.</span> Bank card number cannot contain letters and symbols
-            </p>
-            <p>
-              <span className="font-semibold">4.</span> If you are facing any problem in adding bank then message
-              customer care now
-            </p>
-          </div>
-        </Card>
-      </div>
-
-      {/* Floating Customer Service Buttons */}
-      <div className="fixed right-4 bottom-6 space-y-3">
-        <button onClick={handleCustomerService} className="bg-blue-500 rounded-full p-3 shadow-lg">
-          <Headphones className="text-white" size={20} />
-        </button>
-        <button onClick={handleCustomerService} className="bg-blue-500 rounded-full p-3 shadow-lg">
-          <Headphones className="text-white" size={20} />
-        </button>
       </div>
     </div>
   )

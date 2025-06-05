@@ -24,7 +24,7 @@ export default function LoginPage() {
     setError('')
     try {
       await login(email, password)
-      router.push('/')
+      router.push('/home')
     } catch (error: any) {
       setError(mapFirebaseError(error))
     }
