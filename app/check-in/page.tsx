@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card"
 import Link from "next/link"
 import { getAuth, onAuthStateChanged } from "firebase/auth"
 import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore"
-import { db } from "@/lib/firebase"
+import { db } from "@/lib/firebase/config"
 
 export default function CheckInPage() {
   const [user, setUser] = useState<any | null>(null)
