@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { ArrowLeft } from 'lucide-react'
+import { getAuth } from 'firebase/auth'
 
 export default function AddBankPage() {
   const router = useRouter()
@@ -31,13 +32,27 @@ export default function AddBankPage() {
     setLoading(true)
     
     try {
-      // Here you would typically make an API call to save the bank details
-      // For now, we'll just simulate a successful save
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      const auth = getAuth()
+      const user = auth.currentUser
       
-      // Store in localStorage for demo purposes
-      localStorage.setItem('bankDetails', JSON.stringify(formData))
+      if (!user) {
+        alert('Please login to add bank details')
+        return
+      }
+
+      const response = await fetch('/api/bank-card', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to save bank details')
+      }
       
+      alert('Bank details saved successfully!')
       router.push('/profile')
     } catch (error) {
       console.error('Error saving bank details:', error)

@@ -4,8 +4,8 @@ import { useState, useEffect } from "react"
 import { ArrowLeft, Headphones } from "lucide-react"
 import Link from "next/link"
 import { getAuth } from "firebase/auth"
-import { getFirestore, collection, query, where, getDocs } from "firebase/firestore"
-import { app } from "./lib/firebase/config"
+import { collection, query, where, getDocs } from "firebase/firestore"
+import { db } from "./lib/firebase/config"
 
 interface WithdrawalRecord {
   id: string
@@ -23,7 +23,6 @@ export default function WithdrawalRecordsPage() {
       const auth = getAuth()
       const user = auth.currentUser
       if (!user) return
-      const db = getFirestore(app)
       const q = query(collection(db, "withdrawals"), where("userId", "==", user.uid))
       const querySnapshot = await getDocs(q)
       const records: WithdrawalRecord[] = querySnapshot.docs.map(doc => doc.data() as WithdrawalRecord)

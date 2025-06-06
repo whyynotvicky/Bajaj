@@ -20,6 +20,8 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import Link from "next/link"
 import { getAuth, onAuthStateChanged, signOut } from "firebase/auth"
+import { getDoc, doc } from "firebase/firestore"
+import { db } from "@/firebase"
 
 interface BankCard {
   holderName: string
@@ -35,8 +37,21 @@ export default function ProfilePage() {
 
   useEffect(() => {
     const auth = getAuth()
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser)
+      if (firebaseUser) {
+        try {
+          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid))
+          if (userDoc.exists()) {
+            const userData = userDoc.data()
+            if (userData.bankCard) {
+              setBankCard(userData.bankCard)
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching user data:', error)
+        }
+      }
       setLoading(false)
     })
     return () => unsubscribe()

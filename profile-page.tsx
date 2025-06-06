@@ -20,8 +20,6 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import Link from "next/link"
 import { getAuth, onAuthStateChanged, signOut } from "firebase/auth"
-import { getDoc, doc } from "firebase/firestore"
-import { db } from "@/lib/firebase"
 
 interface BankCard {
   holderName: string
@@ -42,18 +40,15 @@ export default function ProfilePage() {
       setUser(firebaseUser)
       if (firebaseUser) {
         try {
-          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid))
-          if (userDoc.exists()) {
-            const userData = userDoc.data()
-            console.log("Fetched user data:", userData);
-            console.log("Bank card data from fetch:", userData.bankCard);
-            setBalance(userData.balance || 0)
-            if (userData.bankCard) {
-              setBankCard(userData.bankCard)
+          const response = await fetch('/api/bank-card')
+          if (response.ok) {
+            const data = await response.json()
+            if (data.bankCard) {
+              setBankCard(data.bankCard)
             }
           }
         } catch (error) {
-          console.error('Error fetching user data:', error)
+          console.error('Error fetching bank card:', error)
         }
       }
       setLoading(false)
