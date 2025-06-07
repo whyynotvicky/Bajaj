@@ -26,8 +26,8 @@ if (!admin.apps.length) {
   }
 }
 
-// Initialize Firestore (only if Firebase Admin app was initialized successfully)
-const db = admin.apps.length > 0 ? getFirestore(admin.apps[0]) : null; // Safely get Firestore
+// Always get the first app and initialize Firestore
+const db = getFirestore(admin.apps[0]);
 
 console.log('API Route initializing...');
 // Remove Edge Config client initialization
