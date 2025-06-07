@@ -37,13 +37,17 @@ export default function AddBankPage() {
       
       if (!user) {
         alert('Please login to add bank details')
+        setLoading(false);
         return
       }
+
+      const idToken = await user.getIdToken();
 
       const response = await fetch('/api/bank-card', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`,
         },
         body: JSON.stringify(formData),
       })

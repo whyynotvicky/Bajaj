@@ -21,12 +21,14 @@ import { Card } from "@/components/ui/card"
 import Link from "next/link"
 import { getAuth, onAuthStateChanged, signOut } from "firebase/auth"
 import { getDoc, doc } from "firebase/firestore"
-import { db } from "@/firebase"
+import { db } from "@/lib/firebase/config"
+import { useRouter } from "next/navigation"
 
 interface BankCard {
   holderName: string
   accountNumber: string
   ifscCode: string
+  bankName: string
 }
 
 export default function ProfilePage() {
@@ -34,6 +36,7 @@ export default function ProfilePage() {
   const [user, setUser] = useState<any | null>(null)
   const [bankCard, setBankCard] = useState<BankCard | null>(null)
   const [loading, setLoading] = useState(true)
+  const router = useRouter()
 
   useEffect(() => {
     const auth = getAuth()
@@ -41,12 +44,31 @@ export default function ProfilePage() {
       setUser(firebaseUser)
       if (firebaseUser) {
         try {
+          // Get user's bank details
+          const idToken = await firebaseUser.getIdToken();
+          const response = await fetch('/api/bank-card', {
+            headers: {
+              'Authorization': `Bearer ${idToken}`
+            }
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            if (data.bankCard) {
+              setBankCard({
+                holderName: data.bankCard.accountHolderName,
+                accountNumber: data.bankCard.accountNumber,
+                ifscCode: data.bankCard.ifscCode,
+                bankName: data.bankCard.bankName
+              });
+            }
+          }
+
+          // Get user's balance and other details
           const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid))
           if (userDoc.exists()) {
             const userData = userDoc.data()
-            if (userData.bankCard) {
-              setBankCard(userData.bankCard)
-            }
+            // Update any other user data you need
           }
         } catch (error) {
           console.error('Error fetching user data:', error)
@@ -135,8 +157,9 @@ export default function ProfilePage() {
                 <h3 className="font-semibold text-lg">Loading...</h3>
               ) : user && bankCard ? (
                 <>
-                  <h3 className="font-semibold text-lg">Bank Card</h3>
+                  <h3 className="font-semibold text-lg">Bank Details</h3>
                   <div className="text-blue-100 text-sm mt-2">
+                    <div><span className="font-semibold">Bank:</span> {bankCard.bankName}</div>
                     <div><span className="font-semibold">Holder:</span> {bankCard.holderName}</div>
                     <div><span className="font-semibold">Account:</span> {bankCard.accountNumber}</div>
                     <div><span className="font-semibold">IFSC:</span> {bankCard.ifscCode}</div>
@@ -144,8 +167,8 @@ export default function ProfilePage() {
                 </>
               ) : user ? (
                 <>
-                  <h3 className="font-semibold text-lg">No bank card</h3>
-                  <p className="text-blue-100 text-sm">Please add your bank card</p>
+                  <h3 className="font-semibold text-lg">No bank details</h3>
+                  <p className="text-blue-100 text-sm">Please add your bank details</p>
                 </>
               ) : null}
             </div>
@@ -298,6 +321,21 @@ export default function ProfilePage() {
           className="w-full bg-red-500 hover:bg-red-600 text-white rounded-2xl py-4 font-semibold text-lg flex items-center justify-center gap-2 shadow-lg"
         >
           <LogOut size={20} /> Logout
+        </Button>
+      </div>
+
+      {/* New Bank Card Section */}
+      <div className="mx-4 mt-6 space-y-4">
+        <Link href="/withdrawal-records">
+          <Button className="w-full bg-white text-blue-600 hover:bg-gray-50">
+            View Withdrawal Records
+          </Button>
+        </Link>
+        <Button 
+          onClick={() => router.push('/add-bank-card')}
+          className="w-full bg-white text-blue-600 hover:bg-gray-50"
+        >
+          {bankCard ? 'Update Bank Details' : 'Add Bank Details'}
         </Button>
       </div>
     </div>

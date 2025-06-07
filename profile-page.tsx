@@ -20,6 +20,8 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import Link from "next/link"
 import { getAuth, onAuthStateChanged, signOut } from "firebase/auth"
+import { collection, query, where, getDocs } from "firebase/firestore"
+import { db } from "@/lib/firebase/config"
 
 interface BankCard {
   holderName: string

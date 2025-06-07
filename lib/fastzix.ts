@@ -12,7 +12,7 @@ export async function startFastzixPayment({ amount, userId, userPhone, onError }
     console.log('Fastzix order response:', data);
     
     if (!response.ok) {
-      const errorMessage = data.error || data.message || 'Failed to create payment order';
+      const errorMessage = data.message || data.error || 'Failed to create payment order';
       console.error('Fastzix order error:', errorMessage, data);
       if (onError) onError(errorMessage);
       else alert(errorMessage);
@@ -23,14 +23,14 @@ export async function startFastzixPayment({ amount, userId, userPhone, onError }
       console.log('Redirecting to payment URL:', data.payment_url);
       window.location.href = data.payment_url;
     } else {
-      const errorMessage = "Fastzix API Error: " + (data.message || JSON.stringify(data, null, 2));
-      console.error(errorMessage);
+      const errorMessage = data.message || data.error || "Failed to get payment URL";
+      console.error('Fastzix API Error:', errorMessage, data);
       if (onError) onError(errorMessage);
       else alert(errorMessage);
     }
   } catch (err: any) {
-    const errorMessage = "Network or integration error: " + err.message;
-    console.error(errorMessage, err);
+    const errorMessage = err.message || "Network or integration error";
+    console.error('Fastzix payment error:', errorMessage, err);
     if (onError) onError(errorMessage);
     else alert(errorMessage);
   }

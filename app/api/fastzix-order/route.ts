@@ -15,20 +15,24 @@ if (!getApps().length) {
   // Check if the base64 encoded JSON variable is set
   if (!firebaseAdminSdkJsonBase64) {
     console.error('Missing FIREBASE_ADMIN_SDK_JSON_BASE64 environment variable');
-    // Depending on your app structure, you might want to handle this more gracefully
+    throw new Error('Missing FIREBASE_ADMIN_SDK_JSON_BASE64 environment variable');
   } else {
     try {
       // Decode the base64 string and parse it as JSON
       const decodedJsonString = Buffer.from(firebaseAdminSdkJsonBase64, 'base64').toString('utf-8');
+      // Check if the decoded string is valid JSON
+      if (!decodedJsonString.trim().startsWith('{')) {
+        throw new Error('Decoded string is not valid JSON');
+      }
       const serviceAccount = JSON.parse(decodedJsonString);
       
       initializeApp({
         credential: cert(serviceAccount),
       });
       console.log('Firebase Admin SDK initialized successfully using base64 encoded key.');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to initialize Firebase Admin SDK from base64 key:', error);
-       // Handle parsing or initialization errors
+      throw new Error('Failed to initialize Firebase Admin SDK from base64 key: ' + error.message);
     }
   }
 }
@@ -53,11 +57,11 @@ export async function POST(request: Request) {
 
   // Ensure database is initialized
   if (!db) {
-     console.error('Database not initialized in /api/fastzix-order route');
-     return NextResponse.json(
-       { error: 'Server configuration error: Database not available.' },
-       { status: 500 }
-     );
+    console.error('Database not initialized in /api/fastzix-order route');
+    return NextResponse.json(
+      { error: 'Server configuration error: Database not available.' },
+      { status: 500 }
+    );
   }
 
   try {
@@ -66,51 +70,52 @@ export async function POST(request: Request) {
 
     // Validate incoming request parameters
     if (!amount || typeof amount !== 'number' || amount <= 0) {
-       console.error('Invalid or missing amount', { amount });
-       return NextResponse.json(
-         { error: 'Invalid or missing amount' },
-         { status: 400 }
-       );
+      console.error('Invalid or missing amount', { amount });
+      return NextResponse.json(
+        { error: 'Invalid or missing amount' },
+        { status: 400 }
+      );
     }
     if (!userId || typeof userId !== 'string' || userId.trim() === '') {
-       console.error('Invalid or missing userId', { userId });
-       return NextResponse.json(
-         { error: 'Invalid or missing userId' },
-         { status: 400 }
-       );
+      console.error('Invalid or missing userId', { userId });
+      return NextResponse.json(
+        { error: 'Invalid or missing userId' },
+        { status: 400 }
+      );
     }
-     // Assuming userPhone comes as a string and needs validation/parsing
+    // Assuming userPhone comes as a string and needs validation/parsing
     if (!userPhone || typeof userPhone !== 'string' || !/^\d{10,15}$/.test(userPhone)) {
-        console.error('Invalid or missing userPhone', { userPhone });
-        return NextResponse.json(
-            { error: 'Invalid or missing userPhone (10-15 digits required)' },
-            { status: 400 }
-        );
+      console.error('Invalid or missing userPhone', { userPhone });
+      return NextResponse.json(
+        { error: 'Invalid or missing userPhone (10-15 digits required)' },
+        { status: 400 }
+      );
     }
     const customerMobileInt = parseInt(userPhone); // Cast to integer for API
     if (isNaN(customerMobileInt)) {
-         console.error('Failed to parse userPhone as integer', { userPhone });
-         return NextResponse.json(
-             { error: 'Invalid userPhone format' },
-             { status: 400 }
-         );
+      console.error('Failed to parse userPhone as integer', { userPhone });
+      return NextResponse.json(
+        { error: 'Invalid userPhone format' },
+        { status: 400 }
+      );
     }
 
     // Generate unique order ID
     const orderId = 'ORD' + Date.now() + Math.floor(Math.random() * 1000000);
+    const shortOrderId = orderId.substring(0, 20); // Create a shorter version for UDF fields
     const redirectUrl = `${NEXT_PUBLIC_APP_URL}wallet/rechargerecord`; // Use configured redirect URL
-    console.log('Generated orderId and redirect URL:', { orderId, redirectUrl });
+    console.log('Generated orderId and redirect URL:', { orderId, shortOrderId, redirectUrl });
 
     // Create a transaction document in Firestore immediately with pending status
     const transactionRef = db.collection('transactions').doc(orderId);
     const transactionData = {
       orderId,
+      shortOrderId, // Store the short version for reference
       userId,
       amount,
-      userPhone: customerMobileInt, // Store as number if Fastzix requires, or keep original string
-      status: 'PENDING', // Initial status
+      userPhone: customerMobileInt,
+      status: 'PENDING',
       createdAt: new Date().toISOString(),
-      // Add other relevant fields like payment_method, gateway etc. if available
     };
 
     console.log('Attempting to create transaction document in Firestore:', transactionData);
@@ -118,30 +123,26 @@ export async function POST(request: Request) {
     console.log('Transaction document created successfully in Firestore.');
 
     // Prepare data for Fastzix API call
-    const fastzixApiUrl = 'https://fastzix.in/api/v1/order'; // Ensure this is correct
+    const fastzixApiUrl = 'https://fastzix.in/api/v1/order';
     const fastzixData = {
-      customer_mobile: customerMobileInt, // Use integer phone number
+      customer_mobile: customerMobileInt,
       merch_id: FASTZIX_MERCH_ID,
       amount: amount,
       order_id: orderId,
-      currency: 'INR', // Assuming INR, adjust if needed
+      currency: 'INR',
       redirect_url: redirectUrl,
-      udf1: userId.substring(0, 20), // Use first 20 characters of userId for Fastzix constraint
-      udf2: 'Recharge', // Added missing required parameter
-      udf3: userPhone, // Added missing required parameter
-      udf4: 'NextJS', // Added likely missing required parameter
-      udf5: orderId.substring(0, 20), // Use first 20 characters of orderId for Fastzix constraint
+      udf1: userId.substring(0, 20), // Truncate userId to 20 characters
+      udf2: 'Recharge',
+      udf3: userPhone,
+      udf4: 'NextJS',
+      udf5: shortOrderId // Use the shorter order ID
     };
 
-    // TODO: Generate xverify signature as per Fastzix docs
-    // This part is crucial and needs to match Fastzix's requirements exactly.
-    // Ensure FASTZIX_API_KEY is the correct key for signature generation.
-    // Example (replace with actual Fastzix logic):
-    const secret_key = FASTZIX_API_KEY; // Assuming API key is used as secret key for xverify
+    // Generate xverify signature
+    const secret_key = FASTZIX_API_KEY;
     function generateXverify(data: Record<string, any>, secret_key: string): string {
       const sortedKeys = Object.keys(data).sort();
       const dataString = sortedKeys.map(key => `${key}=${data[key]}`).join('|');
-      // Use appropriate hashing algorithm (Fastzix docs mentioned SHA-256 previously)
       return crypto.createHmac('sha256', secret_key).update(dataString).digest('hex');
     }
     const xverify = generateXverify(fastzixData, secret_key);
@@ -155,7 +156,7 @@ export async function POST(request: Request) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-VERIFY': xverify, // Include the signature
+        'X-VERIFY': xverify,
       },
       body: JSON.stringify(fastzixData),
     });
@@ -164,49 +165,68 @@ export async function POST(request: Request) {
     const responseData = await response.json();
     console.log('Fastzix API raw response body:', responseData);
 
-      if (!response.ok) {
-        console.error('Fastzix API returned non-OK status:', {
-          status: response.status,
-          statusText: response.statusText,
-          data: responseData
-        });
-        // Update transaction status to FAILED if API call fails
-        console.log('Updating transaction status to FAILED due to non-OK Fastzix response');
-        await transactionRef.update({ status: 'FAILED' });
-        return NextResponse.json(
-          { error: 'Payment gateway error', details: responseData },
-          { status: response.status }
-        );
-      }
-
-      // Check Fastzix specific success status and payment_url
-      if (responseData.status === true && responseData.result && responseData.result.payment_url) {
-        console.log('Payment URL received from Fastzix:', responseData.result.payment_url);
-        // Update transaction status to REDIRECTING or similar
-         console.log('Updating transaction status to REDIRECTING');
-        await transactionRef.update({ status: 'REDIRECTING' });
-        return NextResponse.json({
-          success: true,
-          payment_url: responseData.result.payment_url
-        });
-      } else {
-        console.error('Invalid Fastzix response structure or success status:', responseData);
-        // Update transaction status to FAILED if Fastzix response is invalid
-        console.log('Updating transaction status to FAILED due to invalid Fastzix response');
-        await transactionRef.update({ status: 'FAILED' });
-        return NextResponse.json(
-          { error: 'Failed to generate payment URL from Fastzix', details: responseData },
-          { status: 400 }
-        );
-      }
-    } catch (error: any) {
-      console.error('Error in Fastzix API call or Firestore operation:', error);
-      // Consider updating transaction status to FAILED here as well if it was created.
+    if (!response.ok) {
+      console.error('Fastzix API returned non-OK status:', {
+        status: response.status,
+        statusText: response.statusText,
+        data: responseData
+      });
+      // Update transaction status to FAILED if API call fails
+      console.log('Updating transaction status to FAILED due to non-OK Fastzix response');
+      await transactionRef.update({ 
+        status: 'FAILED',
+        errorDetails: responseData,
+        errorTimestamp: new Date().toISOString()
+      });
       return NextResponse.json(
-        { error: 'Payment processing error', message: error.message },
-        { status: 500 }
+        { 
+          error: 'Payment gateway error', 
+          message: responseData.message || 'Failed to process payment',
+          details: responseData
+        },
+        { status: response.status }
       );
     }
+
+    // Check Fastzix specific success status and payment_url
+    if (responseData.status === true && responseData.result && responseData.result.payment_url) {
+      console.log('Payment URL received from Fastzix:', responseData.result.payment_url);
+      // Update transaction status to REDIRECTING or similar
+      console.log('Updating transaction status to REDIRECTING');
+      await transactionRef.update({ 
+        status: 'REDIRECTING',
+        paymentUrl: responseData.result.payment_url,
+        updatedAt: new Date().toISOString()
+      });
+      return NextResponse.json({
+        success: true,
+        payment_url: responseData.result.payment_url
+      });
+    } else {
+      console.error('Invalid Fastzix response structure or success status:', responseData);
+      // Update transaction status to FAILED if Fastzix response is invalid
+      console.log('Updating transaction status to FAILED due to invalid Fastzix response');
+      await transactionRef.update({ 
+        status: 'FAILED',
+        errorDetails: responseData,
+        errorTimestamp: new Date().toISOString()
+      });
+      return NextResponse.json(
+        { 
+          error: 'Failed to generate payment URL', 
+          message: responseData.message || 'Invalid response from payment gateway',
+          details: responseData 
+        },
+        { status: 400 }
+      );
+    }
+  } catch (error) {
+    console.error('Error in POST handler:', error);
+    return NextResponse.json(
+      { error: 'Server configuration error: Database not available.' },
+      { status: 500 }
+    );
+  }
 }
 
 // Helper function to generate X-VERIFY signature (adjust based on actual Fastzix requirements)
