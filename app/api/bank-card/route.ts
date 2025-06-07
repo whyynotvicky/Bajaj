@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 
 // Import Firebase Admin SDK
 import * as admin from 'firebase-admin';
-import { getFirestore } from 'firebase-admin/firestore'; // Import Firestore
+import { getFirestore, Firestore } from 'firebase-admin/firestore'; // Import Firestore
 
 // Initialize Firebase Admin if not already initialized
 if (!admin.apps.length) {
@@ -26,8 +26,18 @@ if (!admin.apps.length) {
   }
 }
 
-// Always get the first app and initialize Firestore
-const db = getFirestore(admin.apps[0]);
+// Check if the app is initialized before getting Firestore
+let db: Firestore | undefined;
+if (admin.apps.length > 0) {
+  const app = admin.apps[0];
+  if (app) {
+    db = getFirestore(app);
+  } else {
+    console.error('Firebase Admin app is null. Cannot initialize Firestore.');
+  }
+} else {
+  console.error('Firebase Admin app not initialized. Cannot initialize Firestore.');
+}
 
 console.log('API Route initializing...');
 // Remove Edge Config client initialization
